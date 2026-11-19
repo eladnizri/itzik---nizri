@@ -9,6 +9,7 @@ import { pdfToPolys } from "./js/pdf.js";
 import { imageToPolys } from "./js/raster.js";
 import { bbox } from "./js/svg.js";
 import { toDXF } from "./js/dxf.js";
+import { unfold, stripPolys } from "./js/unfold.js";
 
 const PDF_B64 = "JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAyMDAgMTUwXS9SZXNvdXJjZXM8PC9Gb250PDwvRjEgNSAwIFI+Pj4+L0NvbnRlbnRzIDQgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvTGVuZ3RoIDg1Pj4Kc3RyZWFtCjAgMCBtIDI4LjM0NjUgMCBsIDI4LjM0NjUgMjguMzQ2NSBsIDAgMjguMzQ2NSBsIGggUwpCVCAvRjEgMjQgVGYgNTAgMTAwIFRkIChBQikgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYT4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTA1IDAwMDAwIG4gCjAwMDAwMDAyMTcgMDAwMDAgbiAKMDAwMDAwMDM1MCAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNi9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjQxMwolJUVPRgo="; // 200x150pt page: stroked 10x10mm square at origin + live text "AB"
 
@@ -83,6 +84,52 @@ try {
   check("שניהם סגורים", dn.polys.every(p => p.closed));
   const [big, small] = dn.polys.map(p => bbox([p])).sort((a, b) => b.w - a.w);
   check('חור בקוטר ≈ 37.5 מ"מ', Math.abs(small.w - 37.5) < 0.3, small.w.toFixed(3));
+
+  // ============ Flat pattern ============
+  head("פריסה — STAND MECHBA1660-37 (צלעות 61/25.6/29, T=3, R=1, 90°)");
+  const u = unfold({ legs: [61, 25.6, 29], thickness: 3, radius: 1, angle: 90, k: 0.33 });
+  check("סכום הצלעות = 115.60", Math.abs(u.sum - 115.6) < 1e-9, u.sum.toFixed(2));
+  check("Bend Allowance = 3.126", Math.abs(u.BA - 3.1259) < 0.001, u.BA.toFixed(4));
+  check("Setback = 4.000 (90° → R+T)", Math.abs(u.SB - 4) < 1e-9, u.SB.toFixed(4));
+  check("ניכוי לכיפוף = 4.874", Math.abs(u.BD - 4.8741) < 0.001, u.BD.toFixed(4));
+  check("אורך פרוס = 105.85", Math.abs(u.length - 105.8518) < 0.001, u.length.toFixed(4));
+  check("שני אזורי כיפוף", u.zones.length === 2);
+  check("רוחב כל אזור = BA", u.zones.every(([a, b]) => Math.abs(b - a - u.BA) < 1e-9));
+  check("אזורים בתוך הפס ובסדר עולה",
+        u.zones[0][0] > 0 && u.zones[0][1] < u.zones[1][0] && u.zones[1][1] < u.length,
+        u.zones.map(z => z.map(v => v.toFixed(2)).join("–")).join(" , "));
+  // Identity: total must equal the sum of what is laid out, however many legs there are.
+  for (const legs of [[20, 20], [10, 10, 10, 10], [5, 40, 5]]) {
+    const v = unfold({ legs, thickness: 2, radius: 1.5, angle: 90, k: 0.42 });
+    check(`${legs.length} צלעות: אורך = סכום − ${legs.length - 1}×ניכוי`,
+          Math.abs(v.length - (v.sum - (legs.length - 1) * v.BD)) < 1e-9);
+  }
+  // Legs of 60: an obtuse bend has a large setback, so short legs are genuinely impossible.
+  for (const angle of [30, 90, 135, 170]) {
+    const v = unfold({ legs: [60, 60], thickness: 1.5, radius: 2, angle, k: 0.4 });
+    check(`זווית ${angle}°: אורך חיובי וקטן מהסכום`, v.length > 0 && v.length < v.sum,
+          v.length.toFixed(3));
+  }
+  const throws = (o) => { try { unfold(o); return false; } catch { return true; } };
+  check("זווית 180° נדחית ולא מחזירה מספר שגוי",
+        throws({ legs: [30, 30], thickness: 1.5, radius: 2, angle: 180, k: 0.4 }));
+  check("זווית 0° נדחית", throws({ legs: [30, 30], thickness: 1.5, radius: 2, angle: 0, k: 0.4 }));
+  check("צלע קצרה מהסטבק נדחית",
+        throws({ legs: [2, 30], thickness: 3, radius: 5, angle: 90, k: 0.4 }));
+
+  head("פלט DXF של הפס");
+  const sp = stripPolys(u.length, 25.6, u.zones);
+  check("נתיב חיתוך אחד + 4 קווי כיפוף", sp.length === 5);
+  const stripBox = bbox(sp);
+  check('מלבן 105.85 × 25.60', Math.abs(stripBox.w - u.length) < 1e-9 && Math.abs(stripBox.h - 25.6) < 1e-9,
+        `${stripBox.w.toFixed(3)} × ${stripBox.h.toFixed(3)}`);
+  const sdxf = toDXF(sp);
+  check("טבלת LAYER קיימת", /TABLE\r\n\s*2\r\nLAYER/.test(sdxf) || sdxf.includes("LAYER"));
+  check("שכבות CUT ו-BEND שתיהן בקובץ",
+        sdxf.includes("CUT") && sdxf.includes("BEND"));
+  check("קו כיפוף פתוח, קו חיתוך סגור",
+        sp.filter(p => p.layer === "BEND").every(p => !p.closed) &&
+        sp.find(p => p.layer === "CUT").closed);
 
   head("פלט DXF");
   const all = [...pp, ...sq.polys, ...ci.polys, ...dn.polys];

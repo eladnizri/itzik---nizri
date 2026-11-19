@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פריסת חלק מכופף</title>
+<style>
+  :root { --bg:#faf9f7; --fg:#1a1a1a; --mut:#6b6b6b; --line:#ddd9d3; --acc:#2d6a4f; --warn:#b54708; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1c1a; --fg:#eceae6; --mut:#9a968f; --line:#39372f; --acc:#74c69d; --warn:#f59e0b; }
+  }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; padding:24px 16px; background:var(--bg); color:var(--fg);
+         font:16px/1.6 system-ui,"Segoe UI",sans-serif; }
+  main { max-width:880px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:0 0 4px; }
+  p.sub { color:var(--mut); margin:0 0 20px; font-size:.9rem; }
+  a { color:var(--acc); }
+  fieldset { border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:0 0 16px; }
+  legend { padding:0 6px; font-size:.85rem; color:var(--mut); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  label { display:block; font-size:.85rem; color:var(--mut); margin-bottom:3px; }
+  input,select { width:100%; padding:7px 9px; font:inherit; border:1px solid var(--line);
+                 border-radius:8px; background:var(--bg); color:var(--fg); }
+  #result { font-size:1.5rem; font-weight:700; margin:0 0 4px; }
+  #result small { font-size:.9rem; font-weight:400; color:var(--mut); }
+  #strip { width:100%; height:150px; border:1px solid var(--line); border-radius:12px;
+           background:#fff; display:block; margin:14px 0; }
+  @media (prefers-color-scheme: dark) { #strip { background:#f4f3f0; } }
+  table { border-collapse:collapse; font-size:.88rem; margin-top:10px; }
+  th,td { padding:4px 14px 4px 0; text-align:right; }
+  th { color:var(--mut); font-weight:500; }
+  .me td { font-weight:700; color:var(--acc); }
+  button { padding:9px 20px; font:inherit; font-weight:600; border:0; border-radius:8px;
+           background:var(--acc); color:#fff; cursor:pointer; }
+  .note { font-size:.85rem; color:var(--warn); border-right:3px solid var(--warn);
+          padding:2px 10px 2px 0; margin:12px 0; }
+  .mut { color:var(--mut); font-size:.85rem; }
+  footer { margin-top:24px; font-size:.8rem; color:var(--mut); border-top:1px solid var(--line); padding-top:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>פריסת חלק מכופף</h1>
+  <p class="sub">לחלקים שכל הכיפופים בהם מקבילים — זווית, U, C, Z. <a href="index.html">חזרה לממיר</a></p>
+
+  <fieldset>
+    <legend>מידות מהשרטוט</legend>
+    <div class="grid">
+      <div><label>אורכי הצלעות, מופרדים בפסיק (מ"מ)</label>
+        <input id="legs" value="61, 25.6, 29"></div>
+      <div><label>רוחב החלק (מ"מ)</label><input id="width" type="number" step="0.1" value="25.6"></div>
+      <div><label>עובי החומר (מ"מ)</label><input id="t" type="number" step="0.1" value="3"></div>
+      <div><label>רדיוס פנימי (מ"מ)</label><input id="r" type="number" step="0.1" value="1"></div>
+      <div><label>זווית הכיפוף (מעלות)</label><input id="ang" type="number" step="1" value="90"></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>מתיחת החומר</legend>
+    <div class="grid">
+      <div><label>חומר (ערך התחלה)</label><select id="mat"></select></div>
+      <div><label>K-factor — עדכן לערך שלך</label><input id="k" type="number" step="0.01" min="0.1" max="0.6" value="0.33"></div>
+    </div>
+    <div class="note">זה ערך התחלה בלבד. הוא משתנה לפי החומר, העובי, הרדיוס והמכונה.
+      כיפוף ניסיון אחד על גרוטאה ומדידה ייתנו לך את הערך האמיתי, ומשם זה מדויק לתמיד.</div>
+  </fieldset>
+
+  <p id="result">—</p>
+  <p class="mut" id="detail"></p>
+  <canvas id="strip"></canvas>
+  <button id="dl">הורד DXF</button>
+
+  <table id="sens"></table>
+
+  <footer>
+    אדום = קו חיתוך · כחול = קו כיפוף, בשכבה נפרדת כדי ש-RDWorks תוכל לסמן ולא לחתוך.<br>
+    חורים וקצוות מעוגלים אינם נכללים — הוסף אותם לפי המבטים בשרטוט.<br>
+    <b>לא מתאים לקופסה.</b> כיפופים בשני כיוונים דורשים מגרעות פינה ותוכנת CAD.
+  </footer>
+</main>
+<script type="module" src="js/unfold-ui.js"></script>
+</body>
+</html>
