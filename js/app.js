@@ -7,6 +7,7 @@ const $ = (id) => document.getElementById(id);
 const drop = $("drop"), canvas = $("preview"), stats = $("stats");
 const widthInput = $("width"), dlBtn = $("download"), status = $("status");
 const thrRow = $("thrRow"), thr = $("thr"), thrVal = $("thrVal"), thrAuto = $("thrAuto");
+const txtRow = $("txtRow"), noText = $("noText");
 
 let state = null; // { name, polys, box, file?, pixels?, threshold? }
 
@@ -23,6 +24,7 @@ widthInput.addEventListener("input", render);
 dlBtn.addEventListener("click", download);
 thr.addEventListener("input", () => { thrVal.textContent = thr.value; retrace(+thr.value); });
 thrAuto.addEventListener("click", () => retrace(null));
+noText.addEventListener("change", reparse);
 
 async function load(file) {
   const isPDF = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
@@ -32,14 +34,17 @@ async function load(file) {
     const name = file.name.replace(/\.[^.]+$/, "");
     if (isPDF) {
       thrRow.hidden = true;
-      const { polys, pageCount } = pdfToPolys(new Uint8Array(await file.arrayBuffer()));
+      txtRow.hidden = false;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const { polys, pageCount } = pdfToPolys(bytes, { text: !noText.checked });
       const box = bbox(polys);
       if (!box) return say("לא נמצאו וקטורים בקובץ. ייתכן שזה PDF סרוק — נסה להמיר אותו לתמונה.");
-      state = { name, polys, box };
+      state = { name, polys, box, bytes };
       widthInput.value = box.w.toFixed(1); // the PDF's own size is the honest default
       say(pageCount > 1 ? `שים לב: בקובץ ${pageCount} עמודים, הומר רק הראשון.` : "");
     } else {
       thrRow.hidden = false;
+      txtRow.hidden = true;
       state = { name, file };
       await trace(null, 100); // an image has no physical size; 100 mm until told otherwise
       if (!state.polys) return;
@@ -64,6 +69,19 @@ async function trace(threshold, widthMM) {
   thrVal.textContent = r.threshold;
   widthInput.value = widthInput.value || widthMM.toFixed(1);
   say("");
+}
+
+// Re-reading the PDF is cheap (tens of milliseconds) and keeps one source of truth.
+function reparse() {
+  if (!state?.bytes) return;
+  try {
+    const { polys } = pdfToPolys(state.bytes, { text: !noText.checked });
+    const box = bbox(polys);
+    if (!box) return say("לא נשארה גאומטריה. בטל את הסימון כדי להחזיר את הטקסט.");
+    Object.assign(state, { polys, box });
+    widthInput.value = box.w.toFixed(1);
+    say(""); render();
+  } catch (err) { say("שגיאה: " + err.message); }
 }
 
 async function retrace(threshold) {

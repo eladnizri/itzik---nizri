@@ -10,7 +10,9 @@ const I = [1, 0, 0, 1, 0, 0];
 
 // toMM maps a point in SVG user units (after element transforms) to millimetres,
 // Y-up. Each route supplies its own, because only it knows the page/image height.
-export function svgToPolys(svgText, toMM) {
+// MuPDF renders glyphs as <use> of a <defs> path, so text and geometry are cleanly
+// separable. On an engineering drawing the dimension text must not become cut paths.
+export function svgToPolys(svgText, toMM, { text = true } = {}) {
   const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
   const err = doc.querySelector("parsererror");
   if (err) throw new Error("פלט SVG לא תקין");
@@ -30,6 +32,7 @@ export function svgToPolys(svgText, toMM) {
       if (tag === "path") {
         emit(child.getAttribute("d"), cm);
       } else if (tag === "use") {
+        if (!text) continue;
         const href = child.getAttribute("href") ||
           child.getAttributeNS("http://www.w3.org/1999/xlink", "href") || "";
         const d = defs.get(href.slice(1));

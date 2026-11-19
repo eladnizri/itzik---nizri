@@ -8,7 +8,7 @@ import { svgToPolys } from "./svg.js";
 
 const PT_TO_MM = 25.4 / 72;
 
-export function pdfToPolys(bytes, pageNo = 0) {
+export function pdfToPolys(bytes, { pageNo = 0, text = true } = {}) {
   const doc = mupdf.Document.openDocument(bytes, "application/pdf");
   const page = doc.loadPage(pageNo);
   const box = page.getBounds(); // [x0, y0, x1, y1] in points
@@ -23,5 +23,5 @@ export function pdfToPolys(bytes, pageNo = 0) {
 
   const heightPt = box[3] - box[1];
   const toMM = (x, y) => [x * PT_TO_MM, (heightPt - y) * PT_TO_MM];
-  return { polys: svgToPolys(buf.asString(), toMM), pageCount: doc.countPages() };
+  return { polys: svgToPolys(buf.asString(), toMM, { text }), pageCount: doc.countPages() };
 }
