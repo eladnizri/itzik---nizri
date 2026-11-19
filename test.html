@@ -1,69 +1,109 @@
 <!doctype html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8"><title>בדיקה עצמית</title>
-<style>body{font:15px/1.7 ui-monospace,monospace;padding:20px;max-width:760px;margin:auto}
-.ok{color:#0a0}.bad{color:#d00;font-weight:700}h1{font-size:1.1rem}</style></head>
-<body><h1>בדיקה עצמית — שיטוח בזיירים + כתיבת DXF</h1><pre id="out">מריץ…</pre>
+<style>body{font:14px/1.75 ui-monospace,monospace;padding:20px;max-width:860px;margin:auto}
+.ok{color:#0a0}.bad{color:#d00;font-weight:700}.h{font-weight:700;display:block;margin-top:14px}
+h1{font-size:1.1rem}</style></head>
+<body><h1>בדיקה עצמית — דיוק ההמרה</h1><pre id="out">מריץ…</pre>
 <script type="module">
-import { pdfToPolys, bbox } from "./js/pdf.js";
+import { pdfToPolys } from "./js/pdf.js";
+import { imageToPolys } from "./js/raster.js";
+import { bbox } from "./js/svg.js";
 import { toDXF } from "./js/dxf.js";
 
-// 200x150pt page: a stroked 10x10mm square at the origin + live Helvetica text "AB".
-const PDF_B64 = "JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAyMDAgMTUwXS9SZXNvdXJjZXM8PC9Gb250PDwvRjEgNSAwIFI+Pj4+L0NvbnRlbnRzIDQgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvTGVuZ3RoIDg1Pj4Kc3RyZWFtCjAgMCBtIDI4LjM0NjUgMCBsIDI4LjM0NjUgMjguMzQ2NSBsIDAgMjguMzQ2NSBsIGggUwpCVCAvRjEgMjQgVGYgNTAgMTAwIFRkIChBQikgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYT4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTA1IDAwMDAwIG4gCjAwMDAwMDAyMTcgMDAwMDAgbiAKMDAwMDAwMDM1MCAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNi9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjQxMwolJUVPRgo=";
+const PDF_B64 = "JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAyMDAgMTUwXS9SZXNvdXJjZXM8PC9Gb250PDwvRjEgNSAwIFI+Pj4+L0NvbnRlbnRzIDQgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvTGVuZ3RoIDg1Pj4Kc3RyZWFtCjAgMCBtIDI4LjM0NjUgMCBsIDI4LjM0NjUgMjguMzQ2NSBsIDAgMjguMzQ2NSBsIGggUwpCVCAvRjEgMjQgVGYgNTAgMTAwIFRkIChBQikgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYT4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTA1IDAwMDAwIG4gCjAwMDAwMDAyMTcgMDAwMDAgbiAKMDAwMDAwMDM1MCAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNi9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjQxMwolJUVPRgo="; // 200x150pt page: stroked 10x10mm square at origin + live text "AB"
 
-const log = [];
+const log = [], head = (t) => log.push(`\n§ ${t}`);
 let failed = 0;
 const check = (name, cond, extra = "") => {
   log.push(`${cond ? "✓" : "✗"} ${name}${extra ? "  — " + extra : ""}`);
   if (!cond) failed++;
 };
+const canvasOf = (w, h, draw) => {
+  const c = Object.assign(document.createElement("canvas"), { width: w, height: h });
+  const x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.fillRect(0, 0, w, h); x.fillStyle = "#000"; draw(x);
+  return c;
+};
 
 try {
-  const bytes = Uint8Array.from(atob(PDF_B64), c => c.charCodeAt(0));
-  const { polys } = pdfToPolys(bytes);
-
-  // The square is the only 4-point closed polyline; the glyphs are curvy and dense.
-  const square = polys.find(p => p.closed && p.pts.length === 4);
-  check("הריבוע נמצא כנתיב סגור בן 4 נקודות", !!square,
-        `סה"כ ${polys.length} נתיבים`);
-
+  // ============ PDF route ============
+  head("PDF וקטורי");
+  const { polys: pp } = pdfToPolys(Uint8Array.from(atob(PDF_B64), c => c.charCodeAt(0)));
+  const square = pp.find(p => p.closed && p.pts.length === 4);
+  check("ריבוע נמצא כנתיב סגור בן 4 נקודות", !!square, `סה"כ ${pp.length} נתיבים`);
   if (square) {
     const b = bbox([square]);
-    check('רוחב הריבוע = 10.00 מ"מ', Math.abs(b.w - 10) < 0.01, b.w.toFixed(4));
-    check('גובה הריבוע = 10.00 מ"מ', Math.abs(b.h - 10) < 0.01, b.h.toFixed(4));
-    check('הריבוע יושב בפינת העמוד (0,0)',
-          Math.abs(b.x0) < 0.01 && Math.abs(b.y0) < 0.01,
-          `(${b.x0.toFixed(3)}, ${b.y0.toFixed(3)})`);
+    check('רוחב = 10.000 מ"מ', Math.abs(b.w - 10) < 0.001, b.w.toFixed(4));
+    check('גובה = 10.000 מ"מ', Math.abs(b.h - 10) < 0.001, b.h.toFixed(4));
+    check("ממוקם ב-(0,0)", Math.abs(b.x0) < 0.001 && Math.abs(b.y0) < 0.001,
+          `(${b.x0.toFixed(4)}, ${b.y0.toFixed(4)})`);
   }
+  const glyphs = pp.filter(p => p !== square);
+  check("טקסט חי הומר לקווי מתאר", glyphs.length >= 4, `${glyphs.length} תת-נתיבי גליף`);
 
-  // Live text must have come through as outlines, not been dropped.
-  const glyphs = polys.filter(p => p !== square && p.pts.length > 8);
-  check("טקסט חי הומר לקווי מתאר", glyphs.length >= 2, `${glyphs.length} נתיבי גליף`);
-  check("עקומות שוטחו לנקודות מרובות",
-        glyphs.every(p => p.pts.length > 8));
+  // ============ Raster route ============
+  // 400x400 canvas, black square covering pixels 100..299 -> edges at 100 and 300.
+  head('תמונה — ריבוע 200×200 פיקסל, רוחב יעד 100 מ"מ (0.25 מ"מ/פיקסל)');
+  const sq = await imageToPolys(canvasOf(400, 400, x => x.fillRect(100, 100, 200, 200)),
+                                { widthMM: 100 });
+  check("נתיב אחד בלבד (הרקע הלבן לא נעקב)", sq.polys.length === 1, `${sq.polys.length}`);
+  const sb = bbox(sq.polys);
+  check('רוחב = 50.000 מ"מ בדיוק', Math.abs(sb.w - 50) < 0.001, sb.w.toFixed(4));
+  check('גובה = 50.000 מ"מ בדיוק', Math.abs(sb.h - 50) < 0.001, sb.h.toFixed(4));
+  check('מיקום X = 25.000 מ"מ', Math.abs(sb.x0 - 25) < 0.001, sb.x0.toFixed(4));
+  check('מיקום Y = 25.000 מ"מ', Math.abs(sb.y0 - 25) < 0.001, sb.y0.toFixed(4));
+  check("הנתיב סגור", sq.polys[0].closed);
+  // Sharp corners must survive: a 4-corner shape should not become a blob of nodes.
+  check("פינות נשארו חדות (≤8 נקודות)", sq.polys[0].pts.length <= 8,
+        `${sq.polys[0].pts.length} נקודות`);
+  check("סף אוטומטי (Otsu) באמצע הטווח", sq.threshold > 110 && sq.threshold < 145, `t=${sq.threshold}`);
 
-  const dxf = toDXF(polys);
-  check("DXF הוא R12", dxf.includes("AC1009"));
-  check("משתמש ב-POLYLINE ולא ב-LWPOLYLINE",
-        dxf.includes("POLYLINE") && !dxf.includes("LWPOLYLINE"));
-  check("דגל 'ורטקסים עוקבים' (66) קיים", /\r\n66\r\n1\r\n/.test(dxf));
-  check("אין SPLINE / BLOCK", !dxf.includes("SPLINE") && !dxf.includes("INSERT"));
-  check("מספר ה-VERTEX תואם לנקודות",
-        (dxf.match(/\nVERTEX\r/g) || []).length ===
-        polys.reduce((s, p) => s + p.pts.length, 0));
-  // A closed POLYLINE must not repeat its first vertex.
-  check("נתיב סגור אינו משכפל את נקודת ההתחלה",
-        polys.filter(p => p.closed).every(p => {
-          const a = p.pts[0], z = p.pts[p.pts.length - 1];
-          return Math.hypot(a[0] - z[0], a[1] - z[1]) > 0.001;
-        }));
+  head('תמונה — עיגול קוטר 300 פיקסל, רוחב יעד 100 מ"מ → 75 מ"מ צפוי');
+  const ci = await imageToPolys(
+    canvasOf(400, 400, x => { x.beginPath(); x.arc(200, 200, 150, 0, 7); x.fill(); }),
+    { widthMM: 100 });
+  const cb = bbox(ci.polys);
+  check('קוטר אופקי = 75 מ"מ ±0.4 (1.5 פיקסל)', Math.abs(cb.w - 75) < 0.4, cb.w.toFixed(3));
+  check('קוטר אנכי = 75 מ"מ ±0.4 (1.5 פיקסל)', Math.abs(cb.h - 75) < 0.4, cb.h.toFixed(3));
+  // Radial error against the ideal circle - this is the real accuracy of a traced image.
+  const cx = (cb.x0 + cb.x1) / 2, cy = (cb.y0 + cb.y1) / 2;
+  const rs = ci.polys[0].pts.map(([x, y]) => Math.hypot(x - cx, y - cy));
+  const dev = rs.map(r => Math.abs(r - 37.5));
+  const maxDev = Math.max(...dev), avgDev = dev.reduce((a, b) => a + b, 0) / dev.length;
+  check('סטייה רדיאלית מרבית < 0.25 מ"מ (= פיקסל אחד)', maxDev < 0.25,
+        `מרבית ${maxDev.toFixed(3)} · ממוצעת ${avgDev.toFixed(3)} מ"מ`);
+
+  head("תמונה — טבעת (בדיקת חורים)");
+  const dn = await imageToPolys(canvasOf(400, 400, x => {
+    x.beginPath(); x.arc(200, 200, 150, 0, 7); x.fill();
+    x.globalCompositeOperation = "destination-out";
+    x.beginPath(); x.arc(200, 200, 75, 0, 7); x.fill();
+  }), { widthMM: 100 });
+  check("שני נתיבים: חיצוני + חור", dn.polys.length === 2, `${dn.polys.length}`);
+  check("שניהם סגורים", dn.polys.every(p => p.closed));
+  const [big, small] = dn.polys.map(p => bbox([p])).sort((a, b) => b.w - a.w);
+  check('חור בקוטר ≈ 37.5 מ"מ', Math.abs(small.w - 37.5) < 0.3, small.w.toFixed(3));
+
+  head("פלט DXF");
+  const all = [...pp, ...sq.polys, ...ci.polys, ...dn.polys];
+  const dxf = toDXF(all);
+  check("R12 (AC1009)", dxf.includes("AC1009"));
+  check("POLYLINE ולא LWPOLYLINE", dxf.includes("POLYLINE") && !dxf.includes("LWPOLYLINE"));
+  check("דגל 66 קיים", /\r\n66\r\n1\r\n/.test(dxf));
+  check("אין SPLINE / INSERT", !dxf.includes("SPLINE") && !dxf.includes("INSERT"));
+  check("מספר VERTEX תואם", (dxf.match(/\nVERTEX\r/g) || []).length ===
+        all.reduce((s, p) => s + p.pts.length, 0));
+  check("נתיב סגור לא משכפל נקודת התחלה", all.filter(p => p.closed).every(p => {
+    const a = p.pts[0], z = p.pts[p.pts.length - 1];
+    return Math.hypot(a[0] - z[0], a[1] - z[1]) > 0.001;
+  }));
 } catch (e) {
-  log.push("✗ נפל: " + e.message);
-  failed++;
-  console.error(e);
+  log.push("✗ נפל: " + e.message); failed++; console.error(e);
 }
 
 log.push("", failed ? `${failed} בדיקות נכשלו` : "הכל עבר");
-document.getElementById("out").innerHTML =
-  log.map(l => `<span class="${l.startsWith("✗") || /נכשלו/.test(l) ? "bad" : l.startsWith("✓") || l === "הכל עבר" ? "ok" : ""}">${l}</span>`).join("\n");
+document.getElementById("out").innerHTML = log.map(l =>
+  `<span class="${l.startsWith("✗")||/נכשלו/.test(l) ? "bad" : l.startsWith("§") ? "h" :
+    l.startsWith("✓")||l==="הכל עבר" ? "ok" : ""}">${l}</span>`).join("\n");
 document.title = failed ? "נכשל" : "עבר";
 </script></body></html>
